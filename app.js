@@ -5,16 +5,6 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
 
-// MQTT Server Details
-const mqttServer = "mqtt://mqtt.iot.asmat.app";
-const mqttClient = mqtt.connect(mqttServer, {
-  username: "SENSOR_KURSI_IGNITE",
-  password: "",
-});
-
-// WebSocket Server
-const wss = new WebSocket.Server({ port: 8080 });
-
 // MongoDB Configuration
 // const mongoUri = "mongodb://localhost:27017";
 const mongoUri = "mongodb+srv://ramadhanrizqi21:T0cXKXHl5TIGokai@skripsicluster.vrfa9mf.mongodb.net/?retryWrites=true&w=majority&appName=SkripsiCluster";
@@ -24,24 +14,40 @@ const collectionName = "raw_data_sensor";
 
 // Create MongoDB Client
 const mongoClient = new MongoClient(mongoUri);
-
 // Express App
 const app = express();
 const port = 3000;
 
 app.use(bodyParser.json());
 app.use(cors());
-let db, collection;
+const db = mongoClient.db(dbName);
+const collection = db.collection(collectionName);
 
+const dbConnect = async () => {
+    try {
+      // Connect to MongoDB
+      await mongoClient.connect();
+      console.log("Connected successfully to MongoDB");
+
+    }catch (err) {
+      console.error('Error connecting to MongoDB', err);
+      return _reject(err);
+    }
+}
+
+
+// MQTT Server Details
+const mqttServer = "mqtt://mqtt.iot.asmat.app";
+
+// WebSocket Server
+const wss = new WebSocket.Server({ port: 8080 });
 async function run() {
-  try {
-    // Connect to MongoDB
-    await mongoClient.connect();
-    console.log("Connected successfully to MongoDB");
-
-    db = mongoClient.db(dbName);
-    collection = db.collection(collectionName);
-
+  try{
+    await dbConnect();
+    const mqttClient = mqtt.connect(mqttServer, {
+      username: "SENSOR_KURSI_IGNITE",
+      password: "",
+    });
     // MQTT Client Setup
     mqttClient.on('connect', () => {
       console.log('Connected to MQTT broker');
@@ -55,7 +61,7 @@ async function run() {
     mqttClient.on('message', async (topic, message) => {
       const msgString = message.toString();
       console.log(`Received message: ${msgString} from topic: ${topic}`);
-
+    
       // Save message to MongoDB
       try {
         const messageObject = JSON.parse(message);
@@ -72,7 +78,7 @@ async function run() {
       } catch (err) {
         console.error('Failed to save message to MongoDB', err);
       }
-
+    
       // Broadcast message to WebSocket clients
       wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -86,10 +92,10 @@ async function run() {
     });
 
     console.log('WebSocket server started on ws://localhost:8080');
-
-  } catch (err) {
-    console.error('Error connecting to MongoDB', err);
+  }catch(err){
+    console.log(err)
   }
+    
 }
 
 // Function to group data by time_sensor with pagination
@@ -237,7 +243,7 @@ app.listen(port, () => {
 });
 
 // Run the setup
-run().catch(console.dir);
+run();
 
 // Close MongoDB client on process exit
 process.on('SIGINT', async () => {
